@@ -3,7 +3,6 @@ Jacob-Leal model
 - Julia version: 1.7.1
 - Authors: Ivan Jericevich, Patrick Chang, Tim Gebbie
 =#
-using Random, Distributions, ProgressMeter, Printf
 
 #----- Structures -----#
 mutable struct JacobLealParameters <: Parameters
