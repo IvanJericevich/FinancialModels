@@ -3,5 +3,5 @@ using Random, Distributions, ProgressMeter, Printf
 include("common.jl")
 include("JacobLeal/JacobLeal.jl")
 include("api.jl")
-export Options, JacobLealParameters, Simulate
+export SimulationResults, Options, JacobLealParameters, Simulate, prices, trace
 end

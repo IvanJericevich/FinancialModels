@@ -30,9 +30,10 @@ mutable struct JacobLealParameters <: Parameters
 	# Time dependent parameters
 	ϵₜᶜ::Float64 # Chartist order size noise
 	ϵₜᶠ::Float64 # Fundamentalist order size noise
-	function JacobLealParameters(; Nᴸ = 10000, Nᴴ = 100, θ = 20, θ⁺ = 40, θ⁻ = 10, σ_chartist = 0.05,
-		α_chartist = 0.04, σ_fundamentalist = 0.01, α_fundamentalist = 0.04, σʸ = 0.01,
-		σᶻ = 0.01, δ = 0.0001, γᴸ = 20, γᴴ = 1, κ⁺ = 0.01, κ⁻ = 0, η⁺ = 0.2, η⁻ = 0,
+	function JacobLealParameters(; Nᴸ::Int64 = 10000, Nᴴ::Int64 = 100, θ::Int64 = 20, θ⁺::Int64 = 40,
+		θ⁻::Int64 = 10, σ_chartist = 0.05::Float64, α_chartist::Float64 = 0.04, σ_fundamentalist::Float64 = 0.01,
+		α_fundamentalist::Float64 = 0.04, σʸ::Float64 = 0.01, σᶻ::Float64 = 0.01, δ::Float64 = 0.0001,
+		γᴸ::Int64 = 20, γᴴ::Int64 = 1, κ⁺::Float64 = 0.01, κ⁻::Float64 = 0.0, η⁺::Float64 = 0.2, η⁻::Float64 = 0.0,
 		λ = 0.625, ζ = 1) # Constructor with default parameter values from Jacob-Leal
 		if θ⁻ > θ⁺ # Lower bound must be less than upper bound
 			error("Incorrect parameter values. Ensure θ⁻ < θ⁺")
@@ -70,8 +71,8 @@ end
 end
 mutable struct LowFrequency <: Agent
 	type::Strategy # Chartist or Fundamentalist
-	activated::Bool # Activated or not for next trading sesion (Not used ??CORRECT??)
-	θ::Float64 # Agent trading frequency randomly sampled from truncated exponential (Not used ??CORRECT??)
+	activated::Bool # Activated or not for next trading sesion
+	θ::Int64 # Agent trading frequency randomly sampled from truncated exponential
 	πₜᶜ::Float64 # Agent's chartist strategy profit at time t
 	πₜᶠ::Float64 # Agent's fundamentalist strategy profit at time t
 	ϕₜᶜ::Float64 # Probability of agent adopting chartist strategy at time t
@@ -82,7 +83,6 @@ mutable struct LowFrequency <: Agent
 end
 mutable struct HighFrequency <: Agent
 	activated::Bool # Activated or not for next trading sesion
-	θ::Float64 # Agent trading frequency randomly sampled from truncated exponential (Not used ??CORRECT??)
 	πₜ::Float64 # Agent profit at time t (Not used ??CORRECT??)
 	Δx::Float64 # Relative price difference activation threshold
 	κ::Float64 # Order depth parameter
@@ -95,6 +95,7 @@ mutable struct LimitOrder
 	price::Float64
 end
 mutable struct LimitOrderBook
+	t::Int64
 	bₜ::Float64 # Best bid
     aₜ::Float64 # Best ask
     bids::Vector{LimitOrder} # Stores all the active bids
@@ -109,12 +110,14 @@ end
 mutable struct Options <: SimulationOptions
 	time::Int64 # Simulation time (number of trading sessions in days)
 	p₀::Float64 # Initial price
+	f₀::Float64 # Initial value
 	store_trace::Bool
 	show_trace::Bool
 	show_every::Int64
 	seed::Int64
-	function Options(; time::Int64 = 100, p₀::Float64 = 100.0, store_trace::Bool = false, show_trace::Bool = false, show_every::Int64 = 1, seed::Int64 = 1)
-		new(time, p₀, store_trace, show_trace, show_every, seed)
+	function Options(; time::Int64 = 100, p₀::Float64 = 100.0, f₀::Float64 = 100.0, store_trace::Bool = false, show_trace::Bool = false,
+		show_every::Int64 = 1, seed::Int64 = 1)
+		new(time, p₀, f₀, store_trace, show_trace, show_every, seed)
 	end
 end
 mutable struct State <: SimulationState
@@ -123,11 +126,11 @@ mutable struct State <: SimulationState
 	agents::Dict{String, Int64}
 end
 const Trace = Vector{State}
-struct Results <: SimulationResults
+struct JacobLealResults <: SimulationResults
 	p̄::Vector{Float64}
 	trace::Trace
 end
-function Trace!(trace::Trace, options::Options, t, agents, LOB)
+function Trace!(trace::Trace, options::Options, t::Int64, agents::Vector{Agent}, LOB::LimitOrderBook)
 	ask_volume = isempty(LOB.asks) ? 0.0 : sum(ask.size for ask in LOB.asks)
 	bid_volume = isempty(LOB.bids) ? 0.0 : sum(bid.size for bid in LOB.bids)
 	fundamentalists, chartists, highfrequency = 0, 0, 0
@@ -166,16 +169,17 @@ function InitialiseSimulation(parameters::JacobLealParameters, options::Options)
 	agents = Vector{Agent}() # Initialization
 	for i in 1:parameters.Nᴸ # Iterate and populate low-frequency agents
 		type = rand() < 0.5 ? chartist : fundamentalist # Choose strategy with 50/50 probability
-		θ = rand(Truncated(Exponential(parameters.θ), parameters.θ⁻, parameters.θ⁺)) # Sample trading speed from truncated exponential (Not used ??CORRECT??)
+		θ = convert(Int64, trunc(rand(Truncated(Exponential(parameters.θ), parameters.θ⁻, parameters.θ⁺)))) # Sample trading speed from truncated exponential
 		push!(agents, LowFrequency(type, true, θ, 0, 0, 0.5, 0.5, 0, 0, 0)) # All agents activated at start
 	end
 	for j in 1:parameters.Nᴴ # Iterate and populate high-frequency agents
-		θ = rand(Truncated(Exponential(parameters.θ), parameters.θ⁻, parameters.θ⁺)) # Sample trading speed from truncated exponential (Not used ??CORRECT??)
 		Δx = rand(Uniform(parameters.η⁻, parameters.η⁺))
 		κ = rand(Uniform(parameters.κ⁻, parameters.κ⁺))
-		push!(agents, HighFrequency(true, θ, 0, Δx, κ, 0, 0)) # All agents actiivated at start
+		push!(agents, HighFrequency(true, 0, Δx, κ, 0, 0)) # All agents actiivated at start
 	end
-	LOB = LimitOrderBook(options.p₀, options.p₀, Vector{LimitOrder}(), Vector{LimitOrder}(), options.p₀ - 5, options.p₀ - 5, [options.p₀, options.p₀ + 5]) # Initial prices and fundamental values ??CORRECT??
+	p₋₁ = rand(Normal(options.p₀, parameters.σʸ))
+	f₋₁ = rand(Normal(options.f₀, parameters.σʸ))
+	LOB = LimitOrderBook(0, options.p₀, options.p₀, Vector{LimitOrder}(), Vector{LimitOrder}(), options.f₀, f₋₁, [p₋₁, options.p₀]) # Initial prices and fundamental values
 	return agents, LOB
 end
 #---------------------------------------------------------------------------------------------------
@@ -184,17 +188,19 @@ end
 # Set order sizes and prices
 # Post orders to LOB
 function SubmitOrder!(agent::LowFrequency, LOB::LimitOrderBook, parameters::JacobLealParameters)
-	zₜ = rand(Normal(0, parameters.σᶻ))
-	agent.dₜᶜ = parameters.α_chartist * (LOB.p̄[end] - LOB.p̄[end - 1]) + parameters.ϵₜᶜ # Chartist strategy limit order size
-	agent.dₜᶠ = parameters.α_fundamentalist * (LOB.fₜ - LOB.p̄[end]) + parameters.ϵₜᶠ # Fundamentalist strategy limit order size
-	dₜ = agent.type == chartist ? agent.dₜᶜ : agent.dₜᶠ # Choose order size corresponding to agent strategy
-	agent.pₜ = LOB.p̄[end] * (1 + parameters.δ) * (1 + zₜ) # Limit order price
-	order = LimitOrder(parameters.γᴸ, abs(dₜ), agent.pₜ) # Create order
-	# Push order to LOB
-	if dₜ < 0 # Sell order
-		push!(LOB.asks, order)
-	elseif dₜ > 0 # Buy order
-		push!(LOB.bids, order)
+	if agent.activated
+		zₜ = rand(Normal(0, parameters.σᶻ))
+		agent.dₜᶜ = parameters.α_chartist * (LOB.p̄[end] - LOB.p̄[end - 1]) + parameters.ϵₜᶜ # Chartist strategy limit order size
+		agent.dₜᶠ = parameters.α_fundamentalist * (LOB.fₜ - LOB.p̄[end]) + parameters.ϵₜᶠ # Fundamentalist strategy limit order size
+		dₜ = agent.type == chartist ? agent.dₜᶜ : agent.dₜᶠ # Choose order size corresponding to agent strategy
+		agent.pₜ = LOB.p̄[end] * (1 + parameters.δ) * (1 + zₜ) # Limit order price
+		order = LimitOrder(parameters.γᴸ, abs(dₜ), agent.pₜ) # Create order
+		# Push order to LOB
+		if dₜ < 0 # Sell order
+			push!(LOB.asks, order)
+		elseif dₜ > 0 # Buy order
+			push!(LOB.bids, order)
+		end
 	end
 end
 function SubmitOrder!(agent::HighFrequency, LOB::LimitOrderBook, parameters::JacobLealParameters)
@@ -231,6 +237,7 @@ end
 # Update time-dependent parameters
 # Update LOB parameters
 function PreOpen!(LOB::LimitOrderBook, parameters::JacobLealParameters)
+	LOB.t += 1
 	parameters.ϵₜᶜ = rand(Normal(0, parameters.σ_chartist))
 	parameters.ϵₜᶠ = rand(Normal(0, parameters.σ_fundamentalist))
 	yₜ = rand(Normal(0, parameters.σʸ))
@@ -243,6 +250,7 @@ end
 # Adapt trader strategies for session based on profit from previous session and strategy switching probability
 function AdaptStrategy!(agent::LowFrequency, LOB::LimitOrderBook)
 	agent.type = rand() < agent.ϕₜᶜ ? chartist : fundamentalist
+	agent.activated = mod(LOB.t, agent.θ) == 0
 end
 function AdaptStrategy!(agent::HighFrequency, LOB::LimitOrderBook)
 	agent.activated = abs((LOB.p̄[end] -  LOB.p̄[end - 1]) / LOB.p̄[end - 1]) > agent.Δx # Activate HF agent if relative price difference exceeds threshold
@@ -306,11 +314,18 @@ function ClosingAuction!(LOB::LimitOrderBook)
 				popfirst!(LOB.asks)
 				popfirst!(LOB.bids)
 			end
-			closing_price = (LOB.aₜ + LOB.bₜ) / 2 # Compute mid-price
-			if isempty(LOB.asks) || isempty(LOB.bids)
-				break
+			closing_price = (LOB.aₜ + LOB.bₜ) / 2 # Compute mid-price or last traded price
+			if !(isempty(LOB.asks) || isempty(LOB.bids))
+				LOB.aₜ, LOB.bₜ = LOB.asks[1].price, LOB.bids[1].price # Update best ask and best bid
+			else
+				if !isempty(LOB.asks)
+					LOB.aₜ = minimum(x -> x.price, LOB.asks)
+				end
+				if !isempty(LOB.bids)
+					LOB.bₜ = maximum(x -> x.price, LOB.bids)
+				end
+				break # Break the while loop; no more crossing
 			end
-			LOB.aₜ, LOB.bₜ = LOB.asks[1].price, LOB.bids[1].price # Update best ask and best bid
 		end
 		# Append new closing price
 		if closing_price > 0
@@ -318,14 +333,20 @@ function ClosingAuction!(LOB::LimitOrderBook)
 		else
 			push!(LOB.p̄, LOB.p̄[end])
 		end
-	else
+	else # We still update new best ask and best bid because of new orders even though no crossing occurs
+		if !isempty(LOB.asks)
+			LOB.aₜ = minimum(x -> x.price, LOB.asks)
+		end
+		if !isempty(LOB.bids)
+			LOB.bₜ = maximum(x -> x.price, LOB.bids)
+		end
 		push!(LOB.p̄, LOB.p̄[end])
 	end
 end
 #---------------------------------------------------------------------------------------------------
 
 #----- Model -----#
-function Simulate(parameters::JacobLealParameters = JacobLealParameters(); options::Options = Options())::Results
+function Simulate(parameters::JacobLealParameters = JacobLealParameters(); options::Options = Options())::JacobLealResults
 	Random.seed!(options.seed)
 	tracing = options.store_trace || options.show_trace
 	trace = Trace()
@@ -336,7 +357,7 @@ function Simulate(parameters::JacobLealParameters = JacobLealParameters(); optio
     end
 	Trace!(trace, options, 0, agents, LOB)
 	for t in 1:options.time # Iterate through days/sessions
-		PreOpen!(LOB, parameters) # Update stock fundamental value and parameters for session
+		PreOpen!(LOB, parameters) # Update stock fundamental value and parameters for session (required for first session)
 		for agent in agents
 			AdaptStrategy!(agent, LOB) # Switch strategy for current session based on previous session profits
 			SubmitOrder!(agent, LOB, parameters) # Post order to LOB
@@ -347,6 +368,6 @@ function Simulate(parameters::JacobLealParameters = JacobLealParameters(); optio
 			Trace!(trace, options, t, agents, LOB)
 		end
 	end
-	return Results(LOB.p̄, trace)
+	return JacobLealResults(LOB.p̄, trace)
 end
 #---------------------------------------------------------------------------------------------------
