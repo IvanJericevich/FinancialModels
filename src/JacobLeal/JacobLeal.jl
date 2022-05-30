@@ -18,7 +18,7 @@ mutable struct JacobLealParameters <: Parameters
 	α_fundamentalist::Float64 # Fundamentalists' order size scaling factor
 	σʸ::Float64 # Fundamental value standard deviation
 	σᶻ::Float64 # LF traders' limit-price tick standard deviation
-	δ::Float64 # Price drift for LF traders
+	δ::Float64 # Price drift for LF traders (Constrained to be greater than 0)
 	γᴸ::Int64 # LF traders' unexectuted order resting period until expiry
 	γᴴ::Int64 # HF traders' unexectuted order resting period until expiry
 	κ⁺::Float64 # Uniform distribution upper-bound for HF traders' order-price support
@@ -26,7 +26,7 @@ mutable struct JacobLealParameters <: Parameters
 	η⁺::Float64 # Uniform distribution upper-bound for HF traders' activation
 	η⁻::Float64 # Uniform distribution lower-bound for HF traders' activation
 	λ::Float64 # Market volumes weight in HF traders' order size distribution
-	ζ::Float64 # Intensity of switching parameter for chartist and fundamentalist strategies
+	ζ::Float64 # Intensity of switching parameter for chartist and fundamentalist strategies (Constrained to be greater than 0)
 	# Time dependent parameters
 	ϵₜᶜ::Float64 # Chartist order size noise
 	ϵₜᶠ::Float64 # Fundamentalist order size noise
@@ -44,25 +44,17 @@ mutable struct JacobLealParameters <: Parameters
 		if η⁻ > η⁺ # Lower bound must be less than upper bound
 			error("Incorrect parameter values. Ensure η⁻ < η⁺")
 		end
-		if α_chartist < 0 || α_chartist > 1 || α_fundamentalist < 0 || α_fundamentalist > 1 # Constrained between 0 and 1
+		if α_chartist > 1 || α_fundamentalist > 1 # Constrained between 0 and 1
 			error("Incorrect parameter values. Ensure 0 < α < 1")
 		end
-		if λ < 0 || λ > 1 # Constrained between 0 and 1
+		if λ > 1 # Constrained between 0 and 1
 			error("Incorrect parameter values. Ensure 0 < λ < 1")
-		end
-		if δ < 0 # Constrained to be greater than 0
-			error("Incorrect parameter values. Ensure δ > 0")
-		end
-		if ζ < 0 # Constrained to be greater than 0
-			error("Incorrect parameter values. Ensure ζ > 0")
 		end
 		if γᴸ < γᴴ # HF orders expire faster than LF orders
 			error("Incorrect parameter values. Ensure γᴸ > γᴴ")
 		end
-		if Nᴸ < 0 || Nᴴ < 0 # More LF agents than HF agents
-			error("Incorrect parameter values. Ensure N > 0")
-		end
-		new(Nᴸ, Nᴴ, θ, θ⁺, θ⁻, σ_chartist, α_chartist, σ_fundamentalist, α_fundamentalist, σʸ, σᶻ, δ, γᴸ, γᴴ, κ⁺, κ⁻, η⁺, η⁻, λ, ζ)
+		new(abs(Nᴸ), abs(Nᴴ), abs(θ), abs(θ⁺), abs(θ⁻), abs(σ_chartist), abs(α_chartist), abs(σ_fundamentalist), abs(α_fundamentalist),
+		abs(σʸ), abs(σᶻ), abs(δ), abs(γᴸ), abs(γᴴ), abs(κ⁺), abs(κ⁻), abs(η⁺), abs(η⁻), abs(λ), abs(ζ))
 	end
 end
 @enum Strategy begin
